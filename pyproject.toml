@@ -1,0 +1,17 @@
+[project]
+name = "python-arm-perftests"
+version = "0.1.0"
+description = "Performance tests to compare arm64 vs x86_64 (NumPy-heavy workloads)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.0",
+    "pyperf>=2.9.0",
+    "xgboost>=2.1.4",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+]

@@ -1,0 +1,13 @@
+repos:
+  # We pin gitleaks via pre-commit so installs are reproducible across machines.
+  # The hook entry is overridden to run our wrapper script, but the gitleaks
+  # binary still comes from this pinned hook environment.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+        name: security scan (gitleaks)
+        entry: bash bin/security_scan.sh --mode pre-commit
+        pass_filenames: false
+
+
