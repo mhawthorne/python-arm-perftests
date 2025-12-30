@@ -6,13 +6,18 @@ import pyperf
 
 def _xgboost_nthread() -> int:
     """
-    XGBoost has multiple thread controls; for the benchmarks we pin `nthread`
-    so arch comparisons don't get dominated by different default parallelism.
+    XGBoost has multiple thread controls; for the benchmarks we use CPU count
+    as the default to leverage multi-threaded performance, but allow override
+    via XGBOOST_NTHREAD env var for reproducibility.
     """
-    try:
-        n = int(os.environ.get("XGBOOST_NTHREAD", "1"))
-    except ValueError:
-        n = 1
+    if "XGBOOST_NTHREAD" in os.environ:
+        try:
+            n = int(os.environ["XGBOOST_NTHREAD"])
+        except ValueError:
+            n = 1
+    else:
+        # Default to CPU count for better multi-threaded performance
+        n = os.cpu_count() or 1
     return max(1, n)
 
 
@@ -37,13 +42,18 @@ def add_xgboost_training_benchmarks(runner: pyperf.Runner) -> None:
     Notes:
     - We pre-build the `DMatrix` outside the timed region so we primarily
       measure the training kernel.
-    - We pin `nthread` (default via XGBOOST_NTHREAD=1) for comparability.
+    - We use CPU count as default `nthread` to leverage multi-threaded performance,
+      but this can be overridden via XGBOOST_NTHREAD env var for reproducibility.
+    - We set OMP_NUM_THREADS to match nthread to ensure OpenMP respects the thread count.
     """
     # If this import fails (missing wheel, missing OpenMP runtime, etc.),
     # we want a hard error when the xgboost suite is explicitly requested.
     import xgboost as xgb
 
     nthread = _xgboost_nthread()
+    # Ensure OpenMP respects the thread count (XGBoost uses OpenMP internally)
+    if "OMP_NUM_THREADS" not in os.environ:
+        os.environ["OMP_NUM_THREADS"] = str(nthread)
 
     # Moderate size: heavy enough to be above timer noise, small enough to run
     # under pyperf without making the suite painfully slow.
@@ -76,6 +86,34 @@ def add_xgboost_training_benchmarks(runner: pyperf.Runner) -> None:
         inner_loops=1,
     )
 
+    # Exact method: slower but more accurate, different parallelization pattern
+    params_exact = params.copy()
+    params_exact["tree_method"] = "exact"
+
+    def train_exact() -> float:
+        booster = xgb.train(params_exact, dtrain, num_boost_round=num_boost_round)
+        return float(booster.attributes().get("best_score", "0") or 0.0)
+
+    runner.bench_func(
+        f"xgboost.train_exact[{x_train.shape[0]}x{x_train.shape[1]},rounds={num_boost_round},nt={nthread}]",
+        train_exact,
+        inner_loops=1,
+    )
+
+    # Approx method: middle ground between exact and hist
+    params_approx = params.copy()
+    params_approx["tree_method"] = "approx"
+
+    def train_approx() -> float:
+        booster = xgb.train(params_approx, dtrain, num_boost_round=num_boost_round)
+        return float(booster.attributes().get("best_score", "0") or 0.0)
+
+    runner.bench_func(
+        f"xgboost.train_approx[{x_train.shape[0]}x{x_train.shape[1]},rounds={num_boost_round},nt={nthread}]",
+        train_approx,
+        inner_loops=1,
+    )
+
 
 def add_xgboost_inference_benchmarks(runner: pyperf.Runner) -> None:
     """
@@ -86,6 +124,9 @@ def add_xgboost_inference_benchmarks(runner: pyperf.Runner) -> None:
     import xgboost as xgb
 
     nthread = _xgboost_nthread()
+    # Ensure OpenMP respects the thread count (XGBoost uses OpenMP internally)
+    if "OMP_NUM_THREADS" not in os.environ:
+        os.environ["OMP_NUM_THREADS"] = str(nthread)
 
     # Train once (not timed), then benchmark predict.
     x_train, y_train = _make_binary_classification(n_samples=50_000, n_features=64, seed=0)

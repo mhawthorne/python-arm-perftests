@@ -101,8 +101,8 @@ warn_if_thread_env_set() {
 warn_if_thread_env_set
 
 echo "==> Creating venvs (if needed)"
-uv venv -p "$ARM_PY" "$ARM_VENV" >/dev/null
-uv venv -p "$X86_PY" "$X86_VENV" >/dev/null
+uv venv --allow-existing -p "$ARM_PY" "$ARM_VENV" >/dev/null
+uv venv --allow-existing -p "$X86_PY" "$X86_VENV" >/dev/null
 
 ensure_arch() {
   local venv="$1"
@@ -176,8 +176,8 @@ run_in_env() {
     fi
 
     # Confirm the output metadata matches the expected arch.
-    python -c "import json; m=json.load(open('$out','r'))['metadata']; print('wrote', '$out', 'machine=', m.get('platform.machine'), 'python_executable=', m.get('python_executable'))"
-    if [[ "$(python -c "import json; print(json.load(open('$out','r'))['metadata'].get('platform.machine',''))")" != "$label" ]]; then
+    python -c "import json; m=json.load(open(\"$out\", \"r\"))[\"metadata\"]; print(\"wrote\", \"$out\", \"machine=\", m.get(\"platform.machine\"), \"python_executable=\", m.get(\"python_executable\"))"
+    if [[ "$(python -c "import json; print(json.load(open(\"$out\", \"r\"))[\"metadata\"].get(\"platform.machine\", \"\"))")" != "$label" ]]; then
       echo "ERROR: $out recorded platform.machine != $label"
       exit 1
     fi
